@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16241D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Saturday Hunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#EDF0EB; --surface:#FFFFFF; --surface-2:#E3E8E2; --line:#CDD5CD;
+  --ink:#16241D; --muted:#5B6B62; --accent:#2E6B4B;
+  --a:#B8452F; --a-soft:#F4DDD6; --b:#2F5DA8; --b-soft:#DAE4F4;
+  --bad:#A23A2A; --gold:#B8862B;
+  --display:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;
+  --body:"Barlow","Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    color-scheme:dark;
+    --bg:#101612; --surface:#18211C; --surface-2:#212C26; --line:#2E3B34;
+    --ink:#E6EDE8; --muted:#95A69C; --accent:#6FBF95;
+    --a:#E8806A; --a-soft:#3A221D; --b:#86A9EA; --b-soft:#1D2A40;
+    --bad:#E8806A; --gold:#E0B45A;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+.wrap{max-width:760px;margin:0 auto;padding-inline:16px}
+
+/* screens */
+.screen{min-height:100vh;display:grid;place-items:center;padding:24px 16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;width:100%;max-width:420px;display:grid;gap:14px}
+.eyebrow{font-family:var(--display);font-weight:600;letter-spacing:.14em;text-transform:uppercase;font-size:12px;color:var(--accent)}
+h1{font-family:var(--display);font-weight:700;font-size:38px;line-height:1;margin:0;text-wrap:balance}
+h2{font-family:var(--display);font-weight:700;font-size:24px;letter-spacing:.02em;margin:0;text-transform:uppercase}
+.muted{color:var(--muted)}
+label.f{display:grid;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
+input.t,textarea.t{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:11px 12px;font-size:16px;width:100%}
+textarea.t{resize:vertical;min-height:44px}
+.pick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pick button{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:14px 10px;font-family:var(--display);font-weight:700;font-size:20px;text-transform:uppercase}
+.pick button.a[aria-pressed="true"]{border-color:var(--a);background:var(--a-soft);color:var(--a)}
+.pick button.b[aria-pressed="true"]{border-color:var(--b);background:var(--b-soft);color:var(--b)}
+.btn{border:0;border-radius:10px;padding:12px 16px;font-weight:600;background:var(--ink);color:var(--bg)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.btn.sm{padding:7px 11px;font-size:13px;border-radius:8px}
+.btn.danger{background:var(--bad);color:#fff}
+pre.code{background:var(--surface-2);padding:10px;border-radius:8px;overflow-x:auto;font-size:12px}
+
+/* header */
+header.board{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px)}
+.board .wrap{padding-block:10px}
+.toprow{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;margin-bottom:8px}
+.me{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me button{border:0;background:none;color:var(--accent);padding:0 0 0 4px;font-weight:600}
+.clock{font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.03em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.clock.warn{color:var(--bad)}
+.live{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:1px}
+.live.on{background:#3BA66B}
+.teams{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.team{border-radius:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--line);position:relative;overflow:hidden}
+.team::before{content:"";position:absolute;inset:0 auto 0 0;width:5px}
+.team.a::before{background:var(--a)} .team.b::before{background:var(--b)}
+.team.mine{box-shadow:0 0 0 2px var(--ink) inset}
+.tname{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.score{font-family:var(--display);font-weight:700;font-size:34px;line-height:1;font-variant-numeric:tabular-nums}
+.team.a .score{color:var(--a)} .team.b .score{color:var(--b)}
+.tmeta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* tabs */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs .wrap{display:grid;grid-template-columns:repeat(3,1fr)}
+nav.tabs button{border:0;background:none;padding:12px 0 14px;font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+nav.tabs button[aria-selected="true"]{color:var(--ink);box-shadow:0 -3px 0 var(--ink) inset}
+main{padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
+
+/* challenge list */
+.chips{display:flex;gap:6px;overflow-x:auto;padding-block:12px 4px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:500;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+section.cat{margin-top:18px}
+.cathead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:4px}
+.cathead .ct{font-size:12px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.catnote{font-size:13px;color:var(--muted);margin:6px 0 0}
+ul.items{list-style:none;margin:0;padding:0}
+li.item{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+li.item:active{background:var(--surface-2)}
+.pts{font-family:var(--display);font-weight:700;font-size:20px;text-align:right;font-variant-numeric:tabular-nums;line-height:1}
+.pts.neg{color:var(--bad)}
+.pts small{display:block;font:500 10px var(--body);color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
+.it{font-weight:500}
+.in{font-size:13px;color:var(--muted);margin-top:2px}
+.tag{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--line);border-radius:4px;padding:1px 5px;margin-left:6px;color:var(--muted);vertical-align:2px}
+.stat{display:flex;gap:5px}
+.pill{min-width:34px;height:30px;padding:0 7px;border-radius:7px;border:1.5px solid var(--line);display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.pill.a.on{background:var(--a);border-color:var(--a);color:#fff}
+.pill.b.on{background:var(--b);border-color:var(--b);color:#fff}
+.pill.a.part{border-color:var(--a);color:var(--a)}
+.pill.b.part{border-color:var(--b);color:var(--b)}
+.empty{color:var(--muted);padding:24px 0;text-align:center}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(10,16,12,.55);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:760px;max-height:92vh;overflow-y:auto;border-radius:16px 16px 0 0;padding:18px 16px calc(24px + env(safe-area-inset-bottom,0px));display:grid;gap:16px}
+.sheethead{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start}
+.sheethead h3{margin:0;font-size:19px;line-height:1.25;text-wrap:balance}
+.close{border:1px solid var(--line);background:var(--surface);border-radius:8px;width:36px;height:36px;font-size:20px;line-height:1}
+.bigpts{font-family:var(--display);font-weight:700;font-size:28px;font-variant-numeric:tabular-nums}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:10px}
+.box h4{margin:0;font-family:var(--display);font-size:17px;letter-spacing:.04em;text-transform:uppercase}
+.filebtn{display:flex;align-items:center;justify-content:center;gap:8px;border:2px dashed var(--line);border-radius:10px;padding:16px;font-weight:600;cursor:pointer;text-align:center}
+.filebtn input{position:absolute;opacity:0;width:1px;height:1px}
+.preview{max-height:220px;border-radius:8px;object-fit:cover;width:100%}
+.err{color:var(--bad);font-size:14px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.award{display:grid;grid-template-columns:1fr 1fr auto;gap:8px}
+.award button{border:2px solid var(--line);background:var(--surface);border-radius:10px;padding:10px;font-weight:700}
+.award button.a[aria-pressed="true"]{background:var(--a);border-color:var(--a);color:#fff}
+.award button.b[aria-pressed="true"]{background:var(--b);border-color:var(--b);color:#fff}
+.stepper{display:grid;grid-template-columns:auto 1fr 40px auto 40px;gap:10px;align-items:center}
+.stepper .lbl{font-weight:600}
+.stepper button{width:40px;height:40px;border-radius:9px;border:1.5px solid var(--line);background:var(--surface);font-size:20px}
+.stepper .v{font-family:var(--display);font-weight:700;font-size:22px;min-width:30px;text-align:center;font-variant-numeric:tabular-nums}
+
+/* media cards */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.feed{display:grid;gap:14px;padding-top:14px}
+.post{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;position:relative}
+.post.rej{opacity:.5}
+.post .media{display:block;width:100%;max-height:70vh;object-fit:contain;background:#000}
+.grid .post .media{aspect-ratio:1/1;object-fit:cover;max-height:none}
+.post .meta{padding:10px 12px;display:grid;gap:3px;font-size:13px}
+.post .who{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tteam{font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#fff;border-radius:4px;padding:1px 6px}
+.tteam.a{background:var(--a)} .tteam.b{background:var(--b)}
+.post .cap{color:var(--ink)}
+.post .ch{font-weight:600;font-size:14px}
+.post .when{color:var(--muted)}
+.rejtag{position:absolute;top:8px;right:8px;background:var(--bad);color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:4px}
+.judgebar{display:flex;gap:6px;padding:0 12px 12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:transparent;padding:6px 12px;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--surface-2);font-weight:600}
+
+/* judge */
+.jwrap{display:grid;gap:14px;padding-top:14px}
+.jitem{display:grid;gap:8px;padding:12px 0;border-bottom:1px solid var(--line)}
+.jitem:last-child{border-bottom:0}
+.jtop{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.jtop .it{flex:1}
+.link{border:0;background:none;color:var(--accent);font-weight:600;padding:0;font-size:13px}
+
+.toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:9px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:30;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div id="screen-config" class="screen" hidden>
+  <div class="card">
+    <div class="eyebrow">Setup needed</div>
+    <h1>Connect Supabase</h1>
+    <p class="muted">Open <b>config.js</b> and paste your Supabase project URL and key, then redeploy. The README has the steps.</p>
+  </div>
+</div>
+
+<div id="screen-error" class="screen" hidden>
+  <div class="card">
+    <div class="eyebrow">Can't reach the game</div>
+    <h1>Connection problem</h1>
+    <p class="muted" id="errText"></p>
+    <button class="btn" onclick="location.reload()">Try again</button>
+  </div>
+</div>
+
+<div id="screen-join" class="screen" hidden>
+  <form class="card" id="joinForm">
+    <div class="eyebrow">NYC · Saturday · 3 hours</div>
+    <h1>Join the hunt</h1>
+    <label class="f">Your name
+      <input class="t" id="joinName" autocomplete="given-name" maxlength="24" required>
+    </label>
+    <div class="f" style="display:grid;gap:6px;font-size:13px;font-weight:600;color:var(--muted)">Your team
+      <div class="pick" id="joinPick">
+        <button type="button" class="a" data-team="A" aria-pressed="false">Team A</button>
+        <button type="button" class="b" data-team="B" aria-pressed="false">Team B</button>
+      </div>
+    </div>
+    <button class="btn" id="joinGo" disabled>Start</button>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header class="board">
+    <div class="wrap">
+      <div class="toprow">
+        <div class="me"><span class="live" id="liveDot" title="Live"></span><span id="meText"></span><button id="switchMe" type="button">Switch</button></div>
+        <div class="clock" id="clock"></div>
+      </div>
+      <div class="teams">
+        <div class="team a" id="teamA"><div class="tname" id="nameA"></div><div class="score" id="scoreA">0</div><div class="tmeta" id="metaA"></div></div>
+        <div class="team b" id="teamB"><div class="tname" id="nameB"></div><div class="score" id="scoreB">0</div><div class="tmeta" id="metaB"></div></div>
+      </div>
+    </div>
+  </header>
+  <main class="wrap">
+    <div id="view-list"></div>
+    <div id="view-feed" hidden></div>
+    <div id="view-judge" hidden></div>
+  </main>
+  <nav class="tabs" role="tablist">
+    <div class="wrap">
+      <button role="tab" data-tab="list" aria-selected="true">Challenges</button>
+      <button role="tab" data-tab="feed" aria-selected="false">Feed</button>
+      <button role="tab" data-tab="judge" aria-selected="false">Judge</button>
+    </div>
+  </nav>
+</div>
+
+<div id="sheetRoot"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="supabase.js"></script>
+<script src="config.js"></script>
+<script src="challenges.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
