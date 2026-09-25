@@ -110,11 +110,16 @@ as $$
 $$;
 
 -- Access: no logins, anyone with the app link can play
+alter table public.hunts       enable row level security;
+alter table public.challenges  enable row level security;
+alter table public.submissions enable row level security;
+alter table public.counters    enable row level security;
+alter table public.awards      enable row level security;
+
 do $$
 declare t text;
 begin
   foreach t in array array['hunts','challenges','submissions','counters','awards'] loop
-    execute format('alter table public.%I enable row level security', t);
     if not exists (select 1 from pg_policies where schemaname='public' and tablename=t and policyname='hunt_open') then
       execute format('create policy hunt_open on public.%I for all to anon, authenticated using (true) with check (true)', t);
     end if;
