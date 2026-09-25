@@ -150,6 +150,10 @@ li.item:active{background:var(--surface-2)}
 .post .when{color:var(--muted)}
 .rejtag{position:absolute;top:8px;right:8px;background:var(--bad);color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:4px}
 .judgebar{display:flex;gap:6px;padding:0 12px 12px}
+.post img.zoomable{cursor:zoom-in}
+.lightbox{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);cursor:zoom-out}
+.lightbox img{max-width:100%;max-height:100%;object-fit:contain;touch-action:pinch-zoom}
+.lightbox .close{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:12px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
 .seg button{border:0;background:transparent;padding:6px 12px;font-size:13px}
 .seg button[aria-pressed="true"]{background:var(--surface-2);font-weight:600}

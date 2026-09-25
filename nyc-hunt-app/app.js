@@ -194,7 +194,7 @@ function postCard(s, compact) {
   const media = s.media_path
     ? (String(s.media_type || "").startsWith("video")
       ? h("video", { class: "media", src: mediaUrl(s.media_path), controls: true, playsinline: true, preload: "metadata" })
-      : h("img", { class: "media", src: mediaUrl(s.media_path), loading: "lazy", alt: it ? it.text : "Submission" }))
+      : h("img", { class: "media zoomable", src: mediaUrl(s.media_path), loading: "lazy", alt: it ? it.text : "Submission", onclick: e => { e.stopPropagation(); openLightbox(mediaUrl(s.media_path), it ? it.text : ""); } }))
     : null;
   const card = h("article", { class: "post" + (s.rejected ? " rej" : "") },
     media,
@@ -203,6 +203,10 @@ function postCard(s, compact) {
       compact ? null : h("div", { class: "ch" }, it ? it.text : s.challenge_id),
       h("div", { class: "who" }, h("span", { class: "tteam " + s.team.toLowerCase(), text: nm(s.team) }), h("span", { text: s.player || "" }), h("span", { class: "when", text: "· " + ago(s.created_at) })),
       s.caption ? h("div", { class: "cap", text: s.caption }) : null));
+  if (S.me && s.team === S.me.team) {
+    card.append(h("div", { class: "judgebar" },
+      h("button", { class: "btn ghost sm", onclick: e => { e.stopPropagation(); deleteSub(s); } }, "Delete")));
+  }
   if (S.judge) {
     card.append(h("div", { class: "judgebar" },
       h("button", { class: "btn ghost sm", onclick: async e => { e.stopPropagation(); await act(() => sb.from("submissions").update({ rejected: !s.rejected }).eq("id", s.id), s.rejected ? "Restored" : "Rejected"); } }, s.rejected ? "Restore" : "Reject"),
@@ -210,6 +214,24 @@ function postCard(s, compact) {
   }
   return card;
 }
+
+async function deleteSub(s) {
+  const it = BY_ID[s.challenge_id];
+  if (!confirm("Delete this " + (String(s.media_type || "").startsWith("video") ? "video" : "photo") + "?" + (it && it.type === "once" && subsFor(it.id, s.team).length === 1 && !s.rejected ? " " + nm(s.team) + " loses the " + fmt(it.points) + " points for it." : ""))) return;
+  const ok = await act(() => sb.from("submissions").delete().eq("id", s.id), "Deleted");
+  // Best effort: the row is what counts for scoring. Needs the hunt_delete storage policy from setup.sql.
+  if (ok && s.media_path) sb.storage.from(BUCKET).remove([s.media_path]).catch(() => {});
+}
+
+// ---------- photo viewer ----------
+function openLightbox(src, alt) {
+  closeLightbox();
+  const box = h("div", { class: "lightbox", id: "lightbox", role: "dialog", "aria-modal": "true", "aria-label": alt || "Photo", onclick: closeLightbox },
+    h("img", { src, alt: alt || "Photo" }),
+    h("button", { class: "close", "aria-label": "Close", onclick: closeLightbox }, "×"));
+  document.body.append(box);
+}
+function closeLightbox() { const lb = $("#lightbox"); if (lb) lb.remove(); }
 
 function renderFeed() {
   const root = $("#view-feed"); root.textContent = "";
@@ -477,7 +499,11 @@ function startJoin() {
 }
 $("#switchMe").addEventListener("click", startJoin);
 document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => { S.tab = b.dataset.tab; renderAll(); window.scrollTo(0, 0); }));
-document.addEventListener("keydown", e => { if (e.key === "Escape" && S.openSheet) closeSheet(); });
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if ($("#lightbox")) closeLightbox();
+  else if (S.openSheet) closeSheet();
+});
 
 // ---------- boot ----------
 (async function boot() {

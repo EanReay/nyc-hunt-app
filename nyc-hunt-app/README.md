@@ -32,6 +32,8 @@ Open the link on two phones. Join as different teams, post a photo on each, and 
 - Share the link in the group chat. Each person enters their name and picks their team. The choice is remembered on their phone.
 - The judge taps **Start 3-hour clock now** on the Judge tab when the hunt begins. Everyone's phone shows the countdown.
 - Post a photo or video on any challenge to claim it. Photos are shrunk before uploading, so they go up fast on cell data. Videos are limited to 50 MB, about 30–60 seconds of phone video. Longer clips should go in the group chat.
+- Tap any photo to see it full size. Tap again (or the ×) to close it.
+- A team can delete its own posts with the **Delete** button under each one. Deleting a team's only photo for a challenge takes those points away.
 - The judge can reject a bad photo from the Feed, which removes its points. They also award the judge's-call items and log penalties.
 
 ## Editing challenges
@@ -40,6 +42,7 @@ All challenges are in `challenges.js`. Change the text, notes or points and rede
 
 ## Things to know
 
+- **Already set up before the Delete button was added?** Run `setup.sql` again in the Supabase SQL Editor. It adds the permission that lets deleted photos also be removed from storage. Without it, deleting still works in the app, but the file stays in Supabase.
 - There are no logins. Anyone with the link can post, so only share it with the group. The judge PIN is a speed bump, not a lock.
 - The free Supabase tier includes 1 GB of file storage, which is plenty for one night. Free projects pause after about a week of no use. If the app says it can't connect on Saturday, open the Supabase dashboard and click **Restore**.
 - Photos stay in your Supabase project after the game. To keep them, download them from **Storage > hunt**. To clear them out, delete the project.

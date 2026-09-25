@@ -14,15 +14,15 @@ window.CATEGORIES = [
     {"id":"street-09","text":"Someone walking a dog in a stroller","note":"","points":150,"type":"once"},
     {"id":"street-10","text":"Team with mounted NYPD horse","note":"Ask the officer first.","points":200,"type":"once"},
   ]},
-  {id:"food", name:"Bodegas & food", note:"For food items, the whole team takes a bite in the photo.", items:[
-    {"id":"food-01","text":"Whole team eating pizza","note":"","points":50,"type":"once"},
+  {id:"food", name:"Bodegas & food", note:"", items:[
+    {"id":"food-01","text":"Eating pizza","note":"","points":50,"type":"once"},
     {"id":"food-02","text":"Street-cart hot dog","note":"","points":50,"type":"once"},
     {"id":"food-03","text":"Black-and-white cookie split four ways","note":"","points":50,"type":"once"},
     {"id":"food-04","text":"Buy a snack none of you recognize from a corner store","note":"Grossest snack gets +100","points":50,"type":"once"},
     {"id":"food-05","text":"Restaurant with a \"C\" grade in the window","note":"","points":150,"type":"once"},
     {"id":"food-06","text":"Buy cheap bodega flowers and give them to a stranger","note":"Photo of the handoff, with their OK.","points":200,"type":"once"},
   ]},
-  {id:"bars", name:"Bars", note:"Drink items need one teammate, not all four. Non-alcoholic counts unless a spirit is named. A bar counts toward only one item.", items:[
+  {id:"bars", name:"Bars", note:"Drink items need just one teammate. Non-alcoholic counts unless a spirit is named. A bar counts toward only one item.", items:[
     {"id":"bars-01","text":"Successfully split the G at a bar with \"Irish\" or \"Tavern\" in the name","note":"","points":50,"type":"once"},
     {"id":"bars-02","text":"Drink a beer brewed in NYC","note":"Can, tap handle or menu as proof.","points":50,"type":"once"},
     {"id":"bars-03","text":"Order a drink with a tiny umbrella","note":"","points":50,"type":"once"},
@@ -65,6 +65,5 @@ window.CATEGORIES = [
   {id:"pen", name:"Penalties", note:"Tap + each time it happens.", items:[
     {"id":"pen-01","text":"Late to the final bar, per 5 minutes","note":"","points":-50,"type":"count","judgeOnly":true},
     {"id":"pen-02","text":"Cab or rideshare between stops","note":"","points":-100,"type":"count","judgeOnly":true},
-    {"id":"pen-03","text":"Photo missing a teammate","note":"Judge's call.","points":-50,"type":"count","judgeOnly":true},
   ]},
 ];
