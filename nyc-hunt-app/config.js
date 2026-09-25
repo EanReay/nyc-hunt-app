@@ -3,7 +3,7 @@ window.HUNT_CONFIG = {
   SUPABASE_URL: "https://sslqmystfnstsuyqxqxe.supabase.co",
   SUPABASE_KEY: "sb_publishable_dKR3Fa0rElikMOwaEEapow_J0aoAvRd",
 
-  // PIN that unlocks the Judge tab. Anyone who reads the page source can see it,
+  // PIN that unlocks the Judge tab and the Admin page. Anyone who reads the page source can see it,
   // so it keeps honest people honest, nothing more.
   JUDGE_PIN: "7673",
 

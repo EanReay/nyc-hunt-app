@@ -2,10 +2,9 @@
 "use strict";
 
 const CFG = window.HUNT_CONFIG || {};
-const CATS = window.CATEGORIES || [];
-const ITEMS = [];
-CATS.forEach(c => c.items.forEach(it => ITEMS.push(Object.assign({ cat: c.id }, it))));
-const BY_ID = Object.fromEntries(ITEMS.map(i => [i.id, i]));
+const BUILTIN = window.CATEGORIES || [];
+// The current hunt's categories and challenges. Rebuilt by applyHunt() whenever data loads.
+let CATS = [], ITEMS = [], BY_ID = {};
 const BUCKET = "hunt";
 const MAX_BYTES = 50 * 1024 * 1024;
 
@@ -36,7 +35,7 @@ function ago(iso) {
   if (s < 3600) return Math.floor(s / 60) + " min ago";
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
-function show(id) { ["#screen-config", "#screen-error", "#screen-join", "#app"].forEach(s => { $(s).hidden = s !== id; }); }
+function show(id) { ["#screen-config", "#screen-error", "#screen-code", "#screen-join", "#screen-admin", "#app"].forEach(s => { $(s).hidden = s !== id; }); }
 
 // ---------- config check ----------
 if (!CFG.SUPABASE_URL || /YOUR-PROJECT/.test(CFG.SUPABASE_URL) || !CFG.SUPABASE_KEY || /PASTE-YOUR/.test(CFG.SUPABASE_KEY) || !window.supabase) {
@@ -47,35 +46,61 @@ const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, { au
 
 // ---------- state ----------
 const S = {
+  code: lsGet("hunt-code", null), hunt: null, custom: [],
   teams: { A: "Team A", B: "Team B" },
   subs: [], counters: {}, awards: {}, endsAt: null,
   me: lsGet("hunt-me", null),
   judge: lsGet("hunt-judge", false),
   tab: "list", cat: lsGet("hunt-cat", "all"), feedFilter: "all",
-  openSheet: null
+  openSheet: null,
+  adminTab: "hunts", editHunt: null, adminHunts: []
 };
 const nm = t => S.teams[t] || ("Team " + t);
 const other = t => (t === "A" ? "B" : "A");
 const mediaUrl = path => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
+// ---------- challenge catalog ----------
+// Every challenge: the built-in ones from challenges.js plus the ones made on the Admin page.
+function catalog() {
+  const cats = BUILTIN.map(c => ({ id: c.id, name: c.name, note: c.note, items: c.items.map(i => Object.assign({ cat: c.id }, i)) }));
+  const byCat = Object.fromEntries(cats.map(c => [c.id, c]));
+  S.custom.forEach(r => {
+    let c = byCat[r.cat_id];
+    if (!c) { c = byCat[r.cat_id] = { id: r.cat_id, name: r.cat_name, note: "", items: [] }; cats.push(c); }
+    c.items.push({ id: r.id, cat: c.id, text: r.text, note: r.note || "", points: r.points, type: r.type, judgeOnly: r.judge_only, custom: true });
+  });
+  return cats;
+}
+function applyHunt() {
+  const pick = S.hunt && S.hunt.challenge_ids ? new Set(S.hunt.challenge_ids) : null;
+  CATS = catalog().map(c => Object.assign({}, c, { items: pick ? c.items.filter(i => pick.has(i.id)) : c.items })).filter(c => c.items.length);
+  ITEMS = CATS.flatMap(c => c.items);
+  BY_ID = Object.fromEntries(ITEMS.map(i => [i.id, i]));
+}
+
 // ---------- data ----------
 async function q(p) { const r = await p; if (r.error) throw r.error; return r.data; }
 async function loadAll() {
-  const [teams, subs, counters, awards, game] = await Promise.all([
-    q(sb.from("teams").select("*")),
-    q(sb.from("submissions").select("*").order("created_at", { ascending: false })),
-    q(sb.from("counters").select("*")),
-    q(sb.from("awards").select("*")),
-    q(sb.from("game").select("*"))
+  const [hunts, custom, subs, counters, awards] = await Promise.all([
+    q(sb.from("hunts").select("*").eq("code", S.code)),
+    q(sb.from("challenges").select("*").order("created_at")),
+    q(sb.from("submissions").select("*").eq("hunt", S.code).order("created_at", { ascending: false })),
+    q(sb.from("counters").select("*").eq("hunt", S.code)),
+    q(sb.from("awards").select("*").eq("hunt", S.code))
   ]);
-  (teams || []).forEach(t => { S.teams[t.id] = t.name; });
+  S.hunt = (hunts && hunts[0]) || null;
+  if (!S.hunt) return false;
+  S.teams = { A: S.hunt.team_a, B: S.hunt.team_b };
+  S.endsAt = S.hunt.ends_at ? new Date(S.hunt.ends_at) : null;
+  S.custom = custom || [];
+  applyHunt();
   S.subs = subs || [];
   announceNew();
   S.counters = {};
   (counters || []).forEach(c => { (S.counters[c.challenge_id] = S.counters[c.challenge_id] || {})[c.team] = c.count; });
   S.awards = {};
   (awards || []).forEach(a => { if (a.team) S.awards[a.challenge_id] = a.team; });
-  S.endsAt = game && game[0] && game[0].ends_at ? new Date(game[0].ends_at) : null;
+  return true;
 }
 // Banner when the other team completes (or enters) a challenge. The first load only records what's already there.
 let seenSubs = null;
@@ -103,14 +128,19 @@ function scheduleReload(delay) {
   reloadT = setTimeout(async () => {
     if (reloading) { reloadAgain = true; return; }
     reloading = true;
-    try { await loadAll(); renderAll(); } catch (e) { console.warn(e); }
+    try {
+      if (S.code && !$("#app").hidden) {
+        if (await loadAll()) renderAll();
+        else showCode("That hunt was deleted. Enter another code.");
+      }
+    } catch (e) { console.warn(e); }
     reloading = false;
     if (reloadAgain) { reloadAgain = false; scheduleReload(50); }
   }, delay == null ? 250 : delay);
 }
 function subscribe() {
   const ch = sb.channel("hunt-live");
-  ["teams", "submissions", "counters", "awards", "game"].forEach(t =>
+  ["hunts", "challenges", "submissions", "counters", "awards"].forEach(t =>
     ch.on("postgres_changes", { event: "*", schema: "public", table: t }, () => scheduleReload()));
   ch.subscribe(status => {
     $("#liveDot").classList.toggle("on", status === "SUBSCRIBED");
@@ -177,6 +207,7 @@ function statusPills(it) {
 
 function renderList() {
   const root = $("#view-list"); root.textContent = "";
+  if (S.cat !== "all" && S.cat !== "open" && !CATS.some(c => c.id === S.cat)) S.cat = "all";
   const chips = h("div", { class: "chips", role: "toolbar" });
   [{ id: "all", name: "All" }, { id: "open", name: "Still open for us" }].concat(CATS).forEach(c => {
     chips.append(h("button", { class: "chip", "aria-pressed": String(S.cat === c.id), onclick: () => { S.cat = c.id; lsSet("hunt-cat", c.id); renderList(); } }, c.name));
@@ -271,9 +302,9 @@ async function act(fn, okMsg) {
   try { const r = await fn(); if (r && r.error) throw r.error; if (okMsg) toast(okMsg); scheduleReload(0); return true; }
   catch (e) { console.warn(e); toast("Didn't save. Check your signal and try again."); return false; }
 }
-function bump(cid, team, d) { return act(() => sb.rpc("bump", { cid, t: team, d })); }
+function bump(cid, team, d) { return act(() => sb.rpc("bump", { h: S.code, cid, t: team, d })); }
 function award(cid, team) {
-  return act(() => team ? sb.from("awards").upsert({ challenge_id: cid, team, updated_at: new Date().toISOString() }) : sb.from("awards").delete().eq("challenge_id", cid),
+  return act(() => team ? sb.from("awards").upsert({ hunt: S.code, challenge_id: cid, team, updated_at: new Date().toISOString() }) : sb.from("awards").delete().eq("hunt", S.code).eq("challenge_id", cid),
     team ? nm(team) + " wins it" : "Award cleared");
 }
 
@@ -312,7 +343,7 @@ function renderJudge() {
   const nA = h("input", { class: "t", id: "tnA", value: nm("A"), maxlength: "24" });
   const nB = h("input", { class: "t", id: "tnB", value: nm("B"), maxlength: "24" });
   wrap.append(h("div", { class: "box" }, h("h4", { text: "Team names" }), nA, nB,
-    h("button", { class: "btn ghost sm", onclick: () => act(() => sb.from("teams").upsert([{ id: "A", name: nA.value.trim() || "Team A" }, { id: "B", name: nB.value.trim() || "Team B" }]), "Names saved") }, "Save names")));
+    h("button", { class: "btn ghost sm", onclick: () => act(() => sb.from("hunts").update({ team_a: nA.value.trim() || "Team A", team_b: nB.value.trim() || "Team B" }).eq("code", S.code), "Names saved") }, "Save names")));
 
   // judge's call
   const jbox = h("div", { class: "box" }, h("h4", { text: "Judge's call" }), h("p", { class: "muted", style: "margin:0;font-size:13px", text: "Open an item to see both teams' entries side by side." }));
@@ -337,14 +368,15 @@ function renderJudge() {
   const rbtn = h("button", { class: "btn danger sm", disabled: true, onclick: resetGame }, "Wipe all scores and photos");
   conf.addEventListener("input", () => { rbtn.disabled = conf.value.trim() !== "RESET"; });
   wrap.append(h("div", { class: "box" }, h("h4", { text: "Reset after testing" }),
-    h("p", { class: "muted", style: "margin:0;font-size:13px", text: "Clears every submission, award, tally and the clock for everyone. Team names stay. Use this after your test run, not during the game." }), conf, rbtn));
+    h("p", { class: "muted", style: "margin:0;font-size:13px", text: "Clears every submission, award, tally and the clock in this hunt for everyone. Team names and challenges stay. Use this after your test run, not during the game." }), conf, rbtn));
 
+  wrap.append(h("button", { class: "btn ghost", onclick: () => openAdmin() }, "Admin: hunts & challenges"));
   wrap.append(h("button", { class: "btn ghost", onclick: () => { S.judge = false; lsSet("hunt-judge", false); renderAll(); } }, "Leave judge mode"));
 }
-function setEnd(d) { return act(() => sb.from("game").upsert({ id: 1, ends_at: d ? d.toISOString() : null }), d ? "Clock set" : "Clock cleared"); }
+function setEnd(d) { return act(() => sb.from("hunts").update({ ends_at: d ? d.toISOString() : null }).eq("code", S.code), d ? "Clock set" : "Clock cleared"); }
 async function resetGame() {
   const ok = await act(async () => {
-    for (const p of [sb.from("submissions").delete().not("id", "is", null), sb.from("awards").delete().neq("challenge_id", ""), sb.from("counters").delete().neq("challenge_id", ""), sb.from("game").upsert({ id: 1, ends_at: null })]) {
+    for (const p of [sb.from("submissions").delete().eq("hunt", S.code), sb.from("awards").delete().eq("hunt", S.code), sb.from("counters").delete().eq("hunt", S.code), sb.from("hunts").update({ ends_at: null }).eq("code", S.code)]) {
       const r = await p; if (r.error) throw r.error;
     }
   }, "Game reset");
@@ -462,10 +494,10 @@ async function submit(it) {
     if (blob.size > MAX_BYTES) throw new Error("big");
     const type = small ? small.type : (d.file.type || "application/octet-stream");
     const ext = small ? small.ext : ((d.file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "") || "bin");
-    const path = `${S.me.team}/${it.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const path = `${S.code}/${S.me.team}/${it.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: type, upsert: false });
     if (up.error) throw up.error;
-    const ins = await sb.from("submissions").insert({ challenge_id: it.id, team: S.me.team, player: S.me.name, media_path: path, media_type: type, caption: (d.caption || "").trim() || null });
+    const ins = await sb.from("submissions").insert({ hunt: S.code, challenge_id: it.id, team: S.me.team, player: S.me.name, media_path: path, media_type: type, caption: (d.caption || "").trim() || null });
     if (ins.error) throw ins.error;
     if (d.previewUrl) URL.revokeObjectURL(d.previewUrl);
     S.draft = { cid: it.id, file: null, caption: "" };
@@ -502,7 +534,8 @@ function renderAll() {
 // ---------- join ----------
 function startJoin() {
   show("#screen-join");
-  let team = S.me ? S.me.team : null;
+  $("#joinHunt").textContent = S.hunt.name;
+  let team = S.me && S.me.code === S.code ? S.me.team : null;
   const name = $("#joinName"); name.value = S.me ? S.me.name : "";
   const go = $("#joinGo");
   const upd = () => {
@@ -513,12 +546,13 @@ function startJoin() {
   name.oninput = upd;
   $("#joinForm").onsubmit = e => {
     e.preventDefault(); if (go.disabled) return;
-    S.me = { name: name.value.trim(), team }; lsSet("hunt-me", S.me);
+    S.me = { name: name.value.trim(), team, code: S.code }; lsSet("hunt-me", S.me);
     show("#app"); renderAll();
   };
   upd();
 }
 $("#switchMe").addEventListener("click", startJoin);
+$("#changeHunt").addEventListener("click", () => showCode());
 document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => { S.tab = b.dataset.tab; renderAll(); window.scrollTo(0, 0); }));
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
@@ -526,16 +560,259 @@ document.addEventListener("keydown", e => {
   else if (S.openSheet) closeSheet();
 });
 
-// ---------- boot ----------
-(async function boot() {
-  try { await loadAll(); }
-  catch (e) {
-    console.warn(e);
-    $("#errText").textContent = "The app couldn't load the game from Supabase. Check your signal. If this is the first run, check that setup.sql ran and config.js has the right URL and key. (" + (e && e.message ? e.message : "unknown error") + ")";
-    show("#screen-error");
+// ---------- hunt code ----------
+function loadError(e) {
+  console.warn(e);
+  $("#errText").textContent = "The app couldn't load the game from Supabase. Check your signal. If this is the first run, check that setup.sql ran and config.js has the right URL and key. (" + (e && e.message ? e.message : "unknown error") + ")";
+  show("#screen-error");
+}
+function showCode(msg) {
+  closeSheet();
+  S.code = null; S.hunt = null; lsSet("hunt-code", null);
+  show("#screen-code");
+  $("#codeIn").value = "";
+  $("#codeErr").textContent = msg || "";
+  $("#codeErr").hidden = !msg;
+}
+async function enterHunt(code) {
+  S.code = code; seenSubs = null;
+  if (!(await loadAll())) { showCode(`No hunt with the code ${code}. Check it and try again.`); return; }
+  lsSet("hunt-code", code);
+  if (S.me && S.me.code === code) { show("#app"); renderAll(); } else startJoin();
+}
+$("#codeForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const code = $("#codeIn").value.trim().toUpperCase();
+  if (!code) return;
+  $("#codeGo").disabled = true;
+  try { await enterHunt(code); } catch (err) { loadError(err); }
+  $("#codeGo").disabled = false;
+});
+$("#openAdmin").addEventListener("click", () => openAdmin());
+
+// ---------- admin ----------
+const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const randomCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join("");
+const shareLink = code => location.origin + location.pathname + "?hunt=" + encodeURIComponent(code);
+
+async function openAdmin() {
+  closeSheet();
+  show("#screen-admin");
+  S.editHunt = null;
+  await refreshAdmin();
+}
+function closeAdmin() {
+  if (S.code && S.hunt) enterHunt(S.code).catch(loadError);
+  else showCode();
+}
+async function refreshAdmin() {
+  if (S.judge) {
+    try {
+      const [hunts, custom] = await Promise.all([
+        q(sb.from("hunts").select("*").order("created_at", { ascending: false })),
+        q(sb.from("challenges").select("*").order("created_at"))
+      ]);
+      S.adminHunts = hunts || [];
+      S.custom = custom || [];
+    } catch (e) { console.warn(e); toast("Couldn't load. Check your signal."); }
+  }
+  renderAdmin();
+}
+async function adminAct(fn, okMsg) {
+  try { const r = await fn(); if (r && r.error) throw r.error; if (okMsg) toast(okMsg); await refreshAdmin(); return true; }
+  catch (e) { console.warn(e); toast("Didn't save. " + (e && e.message ? e.message : "Check your signal and try again.")); return false; }
+}
+
+function renderAdmin() {
+  const root = $("#adminRoot"); root.textContent = "";
+  root.append(h("div", { class: "adminhead" },
+    h("div", null, h("div", { class: "eyebrow", text: "Admin" }), h("h1", { text: S.adminTab === "hunts" ? "Hunts" : "Challenges" })),
+    h("button", { class: "btn ghost sm", onclick: closeAdmin }, S.code && S.hunt ? "Back to hunt" : "Back")));
+  if (!S.judge) {
+    const pin = h("input", { class: "t", type: "password", inputmode: "numeric", placeholder: "Judge PIN", autocomplete: "off" });
+    const err = h("p", { class: "err", hidden: true, text: "Wrong PIN." });
+    root.append(h("form", { class: "box", onsubmit: e => {
+      e.preventDefault();
+      if (pin.value.trim() === String(CFG.JUDGE_PIN)) { S.judge = true; lsSet("hunt-judge", true); refreshAdmin(); }
+      else err.hidden = false;
+    } }, h("h4", { text: "Judge PIN needed" }), h("p", { class: "muted", style: "margin:0", text: "The admin page uses the same PIN as the Judge tab." }), pin, err, h("button", { class: "btn" }, "Unlock")));
     return;
   }
+  const seg = h("div", { class: "seg", role: "group" });
+  [["hunts", "Hunts"], ["challenges", "Challenges"]].forEach(([k, label]) =>
+    seg.append(h("button", { "aria-pressed": String(S.adminTab === k), onclick: () => { S.adminTab = k; S.editHunt = null; renderAdmin(); } }, label)));
+  root.append(seg);
+  if (S.adminTab === "hunts") root.append(S.editHunt ? huntForm() : huntList());
+  else root.append(challengeForm(), challengeList());
+}
+
+function huntList() {
+  const wrap = h("div", { class: "admin" });
+  wrap.append(h("button", { class: "btn", onclick: () => {
+    S.editHunt = { isNew: true, code: randomCode(), name: "", team_a: "Team A", team_b: "Team B", sel: new Set(catalog().flatMap(c => c.items.map(i => i.id))) };
+    renderAdmin();
+  } }, "New hunt"));
+  if (!S.adminHunts.length) wrap.append(h("p", { class: "empty", text: "No hunts yet." }));
+  S.adminHunts.forEach(hu => {
+    const n = hu.challenge_ids ? hu.challenge_ids.length : null;
+    wrap.append(h("div", { class: "box" },
+      h("div", { class: "jtop" }, h("div", { class: "it", text: hu.name }), h("span", { class: "codetag", text: hu.code })),
+      h("div", { class: "muted", style: "font-size:13px", text: `${hu.team_a} vs ${hu.team_b} · ${n == null ? "all challenges" : n + " challenge" + (n === 1 ? "" : "s")}` }),
+      h("div", { class: "row" },
+        h("button", { class: "btn ghost sm", onclick: () => {
+          S.editHunt = { isNew: false, code: hu.code, name: hu.name, team_a: hu.team_a, team_b: hu.team_b, sel: new Set(hu.challenge_ids || catalog().flatMap(c => c.items.map(i => i.id))) };
+          renderAdmin();
+        } }, "Edit"),
+        h("button", { class: "btn ghost sm", onclick: async () => {
+          const link = shareLink(hu.code);
+          try { await navigator.clipboard.writeText(link); toast("Link copied"); } catch (e) { prompt("Copy this link:", link); }
+        } }, "Copy link"),
+        h("button", { class: "btn ghost sm", onclick: () => enterHunt(hu.code).catch(loadError) }, "Open"),
+        h("button", { class: "btn ghost sm danger-text", onclick: () => {
+          if (prompt(`Delete "${hu.name}"? This removes its scores and posts for good. Type ${hu.code} to confirm.`) !== hu.code) return;
+          if (S.code === hu.code) { S.code = null; S.hunt = null; lsSet("hunt-code", null); }
+          adminAct(() => sb.from("hunts").delete().eq("code", hu.code), "Hunt deleted");
+        } }, "Delete"))));
+  });
+  return wrap;
+}
+
+function huntForm() {
+  const d = S.editHunt;
+  const wrap = h("div", { class: "admin" });
+  const name = h("input", { class: "t", maxlength: "60", placeholder: "e.g. Brooklyn bar crawl", value: d.name });
+  name.addEventListener("input", () => { d.name = name.value; });
+  const code = h("input", { class: "t code", maxlength: "12", value: d.code, disabled: !d.isNew, autocapitalize: "characters", spellcheck: "false" });
+  code.addEventListener("input", () => { d.code = code.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); code.value = d.code; });
+  const tA = h("input", { class: "t", maxlength: "24", value: d.team_a }); tA.addEventListener("input", () => { d.team_a = tA.value; });
+  const tB = h("input", { class: "t", maxlength: "24", value: d.team_b }); tB.addEventListener("input", () => { d.team_b = tB.value; });
+  const err = h("p", { class: "err", hidden: true });
+  const count = h("span", { class: "muted", style: "font-size:13px" });
+  const updCount = () => { count.textContent = d.sel.size + " selected"; };
+  updCount();
+
+  wrap.append(h("div", { class: "box" }, h("h4", { text: d.isNew ? "New hunt" : "Edit hunt" }),
+    h("label", { class: "f" }, "Name", name),
+    h("label", { class: "f" }, d.isNew ? "Join code (3–12 letters or numbers)" : "Join code (can't be changed)", code),
+    h("div", { class: "row2" }, h("label", { class: "f" }, "Team A name", tA), h("label", { class: "f" }, "Team B name", tB))));
+
+  const picker = h("div", { class: "box" }, h("div", { class: "jtop" }, h("h4", { text: "Challenges" }), count));
+  catalog().forEach(c => {
+    const boxes = [];
+    const all = h("input", { type: "checkbox" });
+    const syncAll = () => { const n = c.items.filter(i => d.sel.has(i.id)).length; all.checked = n === c.items.length; all.indeterminate = n > 0 && n < c.items.length; };
+    all.addEventListener("change", () => { c.items.forEach(i => all.checked ? d.sel.add(i.id) : d.sel.delete(i.id)); boxes.forEach(b => { b.checked = all.checked; }); updCount(); syncAll(); });
+    const ul = h("div", { class: "picklist" });
+    c.items.forEach(i => {
+      const cb = h("input", { type: "checkbox" }); cb.checked = d.sel.has(i.id); boxes.push(cb);
+      cb.addEventListener("change", () => { cb.checked ? d.sel.add(i.id) : d.sel.delete(i.id); updCount(); syncAll(); });
+      ul.append(h("label", { class: "pickrow" }, cb, h("span", { class: "pts" + (i.points < 0 ? " neg" : ""), text: fmt(i.points) }), h("span", null, i.text, i.type === "judge" ? h("span", { class: "tag", text: "Judge" }) : i.type === "count" ? h("span", { class: "tag", text: "Tally" }) : null)));
+    });
+    syncAll();
+    picker.append(h("div", { class: "pickcat" }, h("label", { class: "pickrow head" }, all, h("span", { text: c.name })), ul));
+  });
+  wrap.append(picker, err);
+
+  wrap.append(h("div", { class: "row" },
+    h("button", { class: "btn", onclick: async () => {
+      err.hidden = true;
+      const fail = m => { err.textContent = m; err.hidden = false; };
+      if (!d.name.trim()) return fail("Give the hunt a name.");
+      if (!/^[A-Z0-9]{3,12}$/.test(d.code)) return fail("The code needs 3–12 letters or numbers.");
+      if (!d.sel.size) return fail("Pick at least one challenge.");
+      // keep catalog order so the list reads the same as the picker
+      const ids = catalog().flatMap(c => c.items.map(i => i.id)).filter(id => d.sel.has(id));
+      const row = { name: d.name.trim(), team_a: d.team_a.trim() || "Team A", team_b: d.team_b.trim() || "Team B", challenge_ids: ids };
+      if (d.isNew && S.adminHunts.some(x => x.code === d.code)) return fail("That code is already used by another hunt.");
+      const ok = await adminAct(() => d.isNew ? sb.from("hunts").insert(Object.assign({ code: d.code }, row)) : sb.from("hunts").update(row).eq("code", d.code), d.isNew ? "Hunt created" : "Hunt saved");
+      if (ok) { S.editHunt = null; renderAdmin(); }
+    } }, d.isNew ? "Create hunt" : "Save"),
+    h("button", { class: "btn ghost", onclick: () => { S.editHunt = null; renderAdmin(); } }, "Cancel")));
+  return wrap;
+}
+
+function challengeForm() {
+  const cats = catalog();
+  const text = h("textarea", { class: "t", rows: "2", maxlength: "200", placeholder: "e.g. Photo with a pigeon on someone's head" });
+  const note = h("input", { class: "t", maxlength: "140", placeholder: "Optional, e.g. Any pigeon counts." });
+  const pts = h("input", { class: "t", type: "number", inputmode: "numeric", step: "1", value: "100" });
+  const cat = h("select", { class: "t" }, cats.map(c => h("option", { value: c.id }, c.name)), h("option", { value: "__new" }, "+ New category…"));
+  const newCat = h("input", { class: "t", maxlength: "40", placeholder: "New category name", hidden: true });
+  cat.addEventListener("change", () => { newCat.hidden = cat.value !== "__new"; });
+  const type = h("select", { class: "t" },
+    h("option", { value: "once" }, "Photo: each team can do it once"),
+    h("option", { value: "judge" }, "Judge's call: one team wins it"),
+    h("option", { value: "count" }, "Tally: tap + each time it happens"));
+  const jo = h("input", { type: "checkbox" }); jo.checked = true;
+  const joRow = h("label", { class: "pickrow", hidden: true }, jo, h("span", { text: "Only the judge can change the tally" }));
+  type.addEventListener("change", () => { joRow.hidden = type.value !== "count"; });
+  const hunts = S.adminHunts.filter(x => x.challenge_ids);
+  const huntBoxes = hunts.map(x => { const cb = h("input", { type: "checkbox" }); cb.checked = x.code === S.code; return [x, cb]; });
+  const err = h("p", { class: "err", hidden: true });
+
+  const box = h("div", { class: "box" }, h("h4", { text: "New challenge" }),
+    h("label", { class: "f" }, "Description", text),
+    h("label", { class: "f" }, "Note", note),
+    h("div", { class: "row2" }, h("label", { class: "f" }, "Points (negative for a penalty)", pts), h("label", { class: "f" }, "Category", cat)),
+    newCat,
+    h("label", { class: "f" }, "Type", type),
+    joRow);
+  if (huntBoxes.length) box.append(h("div", { class: "f", style: "display:grid;gap:6px;font-size:13px;font-weight:600;color:var(--muted)" }, "Add it to these hunts",
+    huntBoxes.map(([x, cb]) => h("label", { class: "pickrow" }, cb, h("span", null, x.name, " ", h("span", { class: "codetag", text: x.code }))))));
+  const allHunts = S.adminHunts.filter(x => !x.challenge_ids);
+  if (allHunts.length) box.append(h("p", { class: "muted", style: "margin:0;font-size:13px", text: `Hunts that include all challenges get it automatically: ${allHunts.map(x => x.name).join(", ")}.` }));
+  box.append(err, h("button", { class: "btn", onclick: async () => {
+    err.hidden = true;
+    const fail = m => { err.textContent = m; err.hidden = false; };
+    const p = Number(pts.value);
+    if (!text.value.trim()) return fail("Add a description.");
+    if (!Number.isInteger(p) || p === 0) return fail("Points must be a whole number, not 0.");
+    let cat_id = cat.value, cat_name;
+    if (cat_id === "__new") {
+      cat_name = newCat.value.trim();
+      if (!cat_name) return fail("Name the new category.");
+      const same = cats.find(c => c.name.toLowerCase() === cat_name.toLowerCase());
+      cat_id = same ? same.id : "c-" + (cat_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "cat");
+      if (same) cat_name = same.name;
+    } else cat_name = cats.find(c => c.id === cat_id).name;
+    const id = "c-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    const ok = await adminAct(async () => {
+      const r = await sb.from("challenges").insert({ id, cat_id, cat_name, text: text.value.trim(), note: note.value.trim() || null, points: p, type: type.value, judge_only: type.value === "count" && jo.checked });
+      if (r.error) return r;
+      for (const [x, cb] of huntBoxes) {
+        if (!cb.checked) continue;
+        const r2 = await sb.from("hunts").update({ challenge_ids: x.challenge_ids.concat(id) }).eq("code", x.code);
+        if (r2.error) return r2;
+      }
+    }, "Challenge created");
+    if (ok) window.scrollTo(0, 0);
+  } }, "Create challenge"));
+  return box;
+}
+
+function challengeList() {
+  const box = h("div", { class: "box" }, h("h4", { text: "Challenges you've made" }));
+  if (!S.custom.length) box.append(h("p", { class: "muted", style: "margin:0", text: "None yet. The built-in challenges live in challenges.js." }));
+  S.custom.slice().reverse().forEach(r => {
+    const used = S.adminHunts.filter(x => !x.challenge_ids || x.challenge_ids.includes(r.id)).length;
+    box.append(h("div", { class: "jitem" },
+      h("div", { class: "jtop" }, h("div", { class: "it", text: r.text }), h("div", { class: "pts" + (r.points < 0 ? " neg" : ""), text: fmt(r.points) })),
+      h("div", { class: "row" },
+        h("span", { class: "muted", style: "font-size:13px", text: `${r.cat_name} · ${r.type === "judge" ? "Judge's call" : r.type === "count" ? "Tally" : "Photo"} · in ${used} hunt${used === 1 ? "" : "s"}` }),
+        h("button", { class: "link danger-text", onclick: () => {
+          if (!confirm(`Delete "${r.text}"?` + (used ? ` It disappears from ${used} hunt${used === 1 ? "" : "s"}, along with any points scored on it.` : ""))) return;
+          adminAct(() => sb.from("challenges").delete().eq("id", r.id), "Challenge deleted");
+        } }, "Delete"))));
+  });
+  return box;
+}
+
+// ---------- boot ----------
+(async function boot() {
+  const urlCode = new URLSearchParams(location.search).get("hunt");
+  if (urlCode) { S.code = urlCode.trim().toUpperCase(); history.replaceState(null, "", location.pathname); }
   subscribe();
-  if (S.me) { show("#app"); renderAll(); } else startJoin();
+  if (!S.code) { showCode(); return; }
+  try { await enterHunt(S.code); } catch (e) { loadError(e); }
 })();
 })();

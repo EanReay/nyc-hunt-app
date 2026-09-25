@@ -45,7 +45,7 @@ h1{font-family:var(--display);font-weight:700;font-size:38px;line-height:1;margi
 h2{font-family:var(--display);font-weight:700;font-size:24px;letter-spacing:.02em;margin:0;text-transform:uppercase}
 .muted{color:var(--muted)}
 label.f{display:grid;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
-input.t,textarea.t{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:11px 12px;font-size:16px;width:100%}
+input.t,textarea.t,select.t{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:11px 12px;font-size:16px;width:100%}
 textarea.t{resize:vertical;min-height:44px}
 .pick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .pick button{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:14px 10px;font-family:var(--display);font-weight:700;font-size:20px;text-transform:uppercase}
@@ -168,6 +168,23 @@ li.item:active{background:var(--surface-2)}
 
 .toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:9px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:30;max-width:90vw;text-align:center}
 .toast.show{opacity:1}
+input.t.code{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.14em;text-transform:uppercase;text-align:center}
+.linkbtn{border:0;background:none;color:var(--accent);font-weight:600;padding:4px;justify-self:center}
+
+/* admin */
+.adminwrap{padding-block:calc(16px + env(safe-area-inset-top,0px)) 48px;display:grid;gap:14px}
+.adminhead{display:flex;justify-content:space-between;align-items:end;gap:12px}
+.admin{display:grid;gap:14px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.codetag{font-family:var(--display);font-weight:700;letter-spacing:.1em;font-size:14px;border:1px solid var(--line);border-radius:5px;padding:1px 7px;background:var(--surface-2)}
+.danger-text{color:var(--bad)!important}
+.pickcat{display:grid;gap:2px;border-top:1px solid var(--line);padding-top:8px}
+.picklist{display:grid;gap:0;padding-left:26px}
+.pickrow{display:flex;gap:10px;align-items:center;padding:7px 0;font-size:14px;cursor:pointer}
+.pickrow input{width:18px;height:18px;flex:none;accent-color:var(--accent)}
+.pickrow .pts{font-size:16px;min-width:38px}
+.pickrow.head{font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.04em;text-transform:uppercase}
+@media (max-width:420px){.row2{grid-template-columns:1fr}}
 .banners{position:fixed;left:0;right:0;top:calc(8px + env(safe-area-inset-top,0px));z-index:15;display:grid;gap:8px;justify-items:center;padding:0 16px;pointer-events:none}
 .banner{pointer-events:auto;max-width:560px;width:100%;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-left:6px solid var(--muted);border-radius:10px;padding:11px 14px;font-weight:600;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.18);animation:bin .25s ease-out;transition:opacity .6s}
 .banner.a{border-left-color:var(--a)} .banner.b{border-left-color:var(--b)}
@@ -197,9 +214,23 @@ li.item:active{background:var(--surface-2)}
   </div>
 </div>
 
+<div id="screen-code" class="screen" hidden>
+  <form class="card" id="codeForm">
+    <div class="eyebrow">Scavenger hunt</div>
+    <h1>Enter your hunt code</h1>
+    <p class="muted" style="margin:0">Whoever is running the hunt has it.</p>
+    <input class="t code" id="codeIn" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" aria-label="Hunt code" required>
+    <p class="err" id="codeErr" style="margin:0" hidden></p>
+    <button class="btn" id="codeGo">Continue</button>
+    <button type="button" class="linkbtn" id="openAdmin">Admin</button>
+  </form>
+</div>
+
+<div id="screen-admin" hidden><div class="wrap adminwrap" id="adminRoot"></div></div>
+
 <div id="screen-join" class="screen" hidden>
   <form class="card" id="joinForm">
-    <div class="eyebrow">NYC · Saturday · 3 hours</div>
+    <div class="eyebrow" id="joinHunt"></div>
     <h1>Join the hunt</h1>
     <label class="f">Your name
       <input class="t" id="joinName" autocomplete="given-name" maxlength="24" required>
@@ -211,6 +242,7 @@ li.item:active{background:var(--surface-2)}
       </div>
     </div>
     <button class="btn" id="joinGo" disabled>Start</button>
+    <button type="button" class="linkbtn" id="changeHunt">Use a different hunt code</button>
   </form>
 </div>
 
