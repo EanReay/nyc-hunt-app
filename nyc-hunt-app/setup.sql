@@ -101,4 +101,7 @@ begin
   if not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='hunt_upload') then
     create policy hunt_upload on storage.objects for insert to anon, authenticated with check (bucket_id = 'hunt');
   end if;
+  if not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='hunt_delete') then
+    create policy hunt_delete on storage.objects for delete to anon, authenticated using (bucket_id = 'hunt');
+  end if;
 end $$;
