@@ -70,12 +70,33 @@ async function loadAll() {
   ]);
   (teams || []).forEach(t => { S.teams[t.id] = t.name; });
   S.subs = subs || [];
+  announceNew();
   S.counters = {};
   (counters || []).forEach(c => { (S.counters[c.challenge_id] = S.counters[c.challenge_id] || {})[c.team] = c.count; });
   S.awards = {};
   (awards || []).forEach(a => { if (a.team) S.awards[a.challenge_id] = a.team; });
   S.endsAt = game && game[0] && game[0].ends_at ? new Date(game[0].ends_at) : null;
 }
+// Banner when the other team completes (or enters) a challenge. The first load only records what's already there.
+let seenSubs = null;
+function announceNew() {
+  const fresh = seenSubs ? S.subs.filter(s => !seenSubs.has(s.id)) : [];
+  seenSubs = new Set(S.subs.map(s => s.id));
+  if (!S.me || S.tab !== "list") return;
+  fresh.reverse().forEach(s => {
+    const it = BY_ID[s.challenge_id];
+    if (!it || s.rejected || s.team === S.me.team) return;
+    if (it.type === "once" && subsFor(it.id, s.team).length === 1) showBanner(s.team, `${nm(s.team)} completed “${it.text}” (+${fmt(it.points)})`);
+    else if (it.type === "judge") showBanner(s.team, `${nm(s.team)} entered “${it.text}”`);
+  });
+}
+function showBanner(team, msg) {
+  const root = $("#banners");
+  const b = h("div", { class: "banner " + team.toLowerCase(), role: "status", onclick: () => b.remove() }, msg);
+  root.append(b);
+  setTimeout(() => { b.classList.add("fade"); setTimeout(() => b.remove(), 600); }, 10000);
+}
+
 let reloadT, reloading = false, reloadAgain = false;
 function scheduleReload(delay) {
   clearTimeout(reloadT);
